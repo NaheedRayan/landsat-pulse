@@ -23,7 +23,7 @@ st.sidebar.info(
 
 
 
-m = leafmap.Map(minimap_control=True)
+m = leafmap.Map(minimap_control=True ,draw_export=True)
 m.add_basemap("OpenTopoMap")
 m.add_xyz_service("qms.Google Satellite Hybrid")
 
