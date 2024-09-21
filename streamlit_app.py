@@ -1,5 +1,6 @@
 import streamlit as st
 import leafmap.foliumap as leafmap
+import json
 
 # Set page layout to wide
 st.set_page_config(layout="wide")
@@ -19,12 +20,3 @@ st.sidebar.info(
     Quantum Voyagers at [GitHub](https://github.com/NaheedRayan/landsat-pulse)
     """
 )
-
-
-
-
-m = leafmap.Map(minimap_control=True ,draw_export=True)
-m.add_basemap("OpenTopoMap")
-m.add_xyz_service("qms.Google Satellite Hybrid")
-
-m.to_streamlit()
