@@ -1,9 +1,14 @@
+import time
 import json
 import streamlit as st
 from datetime import date
 import leafmap.foliumap as leafmap
 import requests
 import urllib.parse
+import pytz
+from skyfield.api import EarthSatellite, load
+from datetime import datetime
+import folium
 
 # URLs for the Landsat path and cycle data
 LANDSAT_DATA_URL = "https://landsat.usgs.gov/sites/default/files/landsat_acq/assets/json/cycles_full.json"
@@ -58,6 +63,52 @@ def fetch_usgs_path_data(custom_paths):
     except Exception as e:
         st.sidebar.error(f"Error fetching USGS path data: {e}")
         return None
+
+@st.cache_data()
+def get_TLE_data():
+    # Landsat 9 
+    url = 'https://www.n2yo.com/sat/gettle.php?s=49260'
+
+    # Send a GET request
+    response = requests.get(url)
+
+    # Check if the request was successful
+    if response.status_code == 200:
+        # Parse the response (as JSON if it's a JSON API)
+        data = response.json()  # Use .text for raw data as a string
+        return data
+    else:
+        print(f"Error: {response.status_code}")
+
+
+# Function to get current satellite coordinates and system time
+def get_satellite_position(ts, satellite):
+    # Get current time in UTC
+    utc_now = datetime.utcnow().replace(tzinfo=pytz.UTC)
+
+    # Convert the current time to the Skyfield time format
+    time_now = ts.utc(utc_now.year, utc_now.month, utc_now.day, utc_now.hour, utc_now.minute, utc_now.second)
+
+    # Get the satellite's position relative to Earth at the current time
+    geocentric = satellite.at(time_now)
+
+    # Convert geocentric coordinates to latitude, longitude, and altitude
+    subpoint = geocentric.subpoint()
+    latitude = subpoint.latitude.degrees
+    longitude = subpoint.longitude.degrees
+    altitude = subpoint.elevation.km
+
+    # Get the system time in local format
+    system_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    data = {
+        "System_time": system_time,
+        "LAT": latitude,
+        "LONG": longitude,
+        "ALT": altitude
+    }
+    return data
+
 
 # Main app function
 def app():
@@ -131,8 +182,37 @@ def app():
     else:
         st.sidebar.error(f"No path data available for {selected_date_str}")
 
-    # Display the map with all layers
-    m.to_streamlit()
+    # Retrieve TLE data only once and store in session_state to avoid refetching on every rerun
+    if "landsat9_pos" not in st.session_state:
+        st.session_state.landsat9_pos = get_TLE_data()
+
+    landsat9_pos = st.session_state.landsat9_pos
+    # TLE Data for Landsat 9
+    tle_line1 = landsat9_pos[0]
+    tle_line2 = landsat9_pos[1]
+
+    # Create a timescale object
+    ts = load.timescale()
+
+    # Create the EarthSatellite object
+    satellite = EarthSatellite(tle_line1, tle_line2, "Landsat 9", ts)
+
+    # Continuously update satellite position every second
+    while True:
+        # Get the current position of the satellite
+        satellite_pos = get_satellite_position(ts=ts, satellite=satellite)
+        
+        # Add satellite position as a marker on the map
+        m.add_marker([satellite_pos['LAT'], satellite_pos["LONG"]],
+                     popup="Satellite Real-time Position",
+                     icon=folium.Icon(icon="satellite"))  # or any other valid folium icon
+        
+        # Display the map with updated satellite position
+        m.to_streamlit()
+
+        # Pause for 1 second and then rerun the app
+        time.sleep(1)
+        st.rerun()
 
 # Run the app
 app()
